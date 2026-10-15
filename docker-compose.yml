@@ -104,7 +104,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:8080/login/index.php >/dev/null || exit 1",
+          "curl -fsS http://127.0.0.1:8081/login/index.php >/dev/null || exit 1",
         ]
       interval: 30s
       timeout: 10s
