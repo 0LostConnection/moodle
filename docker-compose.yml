@@ -59,13 +59,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # Coolify / Cloudflare Tunnel apontam para esta porta (HTTP interno).
-    # Não exponha 8080 na internet pública; o TLS fica no Cloudflare.
+    # Apache escuta 8080 no container. Sem `ports:` — evita conflito com
+    # coolify-proxy (já usa a 8080 do host). No Coolify Domains:
+    #   http://moodle.seudominio.com:8080
     expose:
-      - "8081"
-    ports:
-      # Útil em Coolify (domínio/túnel) e em teste local: host:container
-      - "${MOODLE_HOST_PORT:-8081}:8081"
+      - "8080"
     environment:
       MOODLE_URL: "${MOODLE_URL:?defina MOODLE_URL}"
       MOODLE_DB_TYPE: mariadb
@@ -104,7 +102,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:8081/login/index.php >/dev/null || exit 1",
+          "curl -fsS http://127.0.0.1:8080/login/index.php >/dev/null || exit 1",
         ]
       interval: 30s
       timeout: 10s
