@@ -1,0 +1,124 @@
+# Moodle 5.3 LTS — Coolify + Cloudflare Tunnel
+#
+# Imagem: oksigenia/moodle (substituto mantido do bitnami/moodle, congelado em 2025)
+# Docs: DEPLOY.md
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MOODLE_DB_NAME:-moodle}
+      MARIADB_USER: ${MOODLE_DB_USER:-moodle}
+      MARIADB_PASSWORD: "${MOODLE_DB_PASSWORD:?defina MOODLE_DB_PASSWORD}"
+      MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD:?defina MARIADB_ROOT_PASSWORD}"
+      MARIADB_AUTO_UPGRADE: "1"
+      MARIADB_DISABLE_UPGRADE_BACKUP: "1"
+    volumes:
+      - moodle_db:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-file-per-table=1
+      - --innodb-buffer-pool-size=${MARIADB_INNODB_BUFFER_POOL_SIZE:-256M}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - moodle
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?defina REDIS_PASSWORD}"
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - moodle_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - moodle
+
+  moodle:
+    image: oksigenia/moodle:5.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Coolify / Cloudflare Tunnel apontam para esta porta (HTTP interno).
+    # Não exponha 8080 na internet pública; o TLS fica no Cloudflare.
+    expose:
+      - "8080"
+    ports:
+      # Útil em Coolify (domínio/túnel) e em teste local: host:container
+      - "${MOODLE_HOST_PORT:-8080}:8080"
+    environment:
+      MOODLE_URL: "${MOODLE_URL:?defina MOODLE_URL}"
+      MOODLE_DB_TYPE: mariadb
+      MOODLE_DB_HOST: db
+      MOODLE_DB_PORT: "3306"
+      MOODLE_DB_NAME: ${MOODLE_DB_NAME:-moodle}
+      MOODLE_DB_USER: ${MOODLE_DB_USER:-moodle}
+      MOODLE_DB_PASSWORD: "${MOODLE_DB_PASSWORD}"
+      MOODLE_DB_PREFIX: ${MOODLE_DB_PREFIX:-mdl_}
+      # TLS termina no Cloudflare / proxy → Moodle gera URLs https
+      MOODLE_SSL_PROXY: ${MOODLE_SSL_PROXY:-auto}
+      MOODLE_REVERSE_PROXY: ${MOODLE_REVERSE_PROXY:-no}
+      MOODLE_ADMIN_USER: ${MOODLE_ADMIN_USER:-admin}
+      MOODLE_ADMIN_PASSWORD: "${MOODLE_ADMIN_PASSWORD:?defina MOODLE_ADMIN_PASSWORD}"
+      MOODLE_ADMIN_EMAIL: ${MOODLE_ADMIN_EMAIL:-admin@example.com}
+      MOODLE_SITE_NAME: ${MOODLE_SITE_NAME:-Moodle}
+      MOODLE_SITE_SHORTNAME: ${MOODLE_SITE_SHORTNAME:-moodle}
+      MOODLE_LANG: ${MOODLE_LANG:-pt_br}
+      MOODLE_EXTRA_LANGS: ${MOODLE_EXTRA_LANGS:-en}
+      MOODLE_TIMEZONE: ${MOODLE_TIMEZONE:-America/Sao_Paulo}
+      MOODLE_REDIS_HOST: redis
+      MOODLE_REDIS_PORT: "6379"
+      MOODLE_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MOODLE_CRON: "on"
+      MOODLE_CRON_INTERVAL: "60"
+      MOODLE_AUTO_UPGRADE: ${MOODLE_AUTO_UPGRADE:-on}
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}
+      PHP_UPLOAD_MAX_FILESIZE: ${PHP_UPLOAD_MAX_FILESIZE:-100M}
+      PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-100M}
+      PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-300}
+      PHP_DATE_TIMEZONE: ${MOODLE_TIMEZONE:-America/Sao_Paulo}
+    volumes:
+      - moodle_code:/var/www/moodle
+      - moodle_data:/var/www/moodledata
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:8080/login/index.php >/dev/null || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    networks:
+      - moodle
+
+networks:
+  moodle:
+    driver: bridge
+
+volumes:
+  moodle_db:
+  moodle_redis:
+  moodle_code:
+  moodle_data:
