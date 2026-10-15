@@ -62,10 +62,10 @@ services:
     # Coolify / Cloudflare Tunnel apontam para esta porta (HTTP interno).
     # Não exponha 8080 na internet pública; o TLS fica no Cloudflare.
     expose:
-      - "8080"
+      - "8081"
     ports:
       # Útil em Coolify (domínio/túnel) e em teste local: host:container
-      - "${MOODLE_HOST_PORT:-8080}:8080"
+      - "${MOODLE_HOST_PORT:-8081}:8081"
     environment:
       MOODLE_URL: "${MOODLE_URL:?defina MOODLE_URL}"
       MOODLE_DB_TYPE: mariadb
